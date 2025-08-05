@@ -3,6 +3,7 @@
  * Sistema de controle do rover usando Xbox gamepad
  * R/L Triggers para velocidade linear
  * Left Joystick X para velocidade angular
+ * Right Joystick Y para controle de tilt da câmera
  */
 
 // ===========================================
@@ -20,9 +21,15 @@ const TRIGGER_SENSITIVITY = 0.3; // Fator de sensibilidade dos triggers (0.1 = b
 const MAX_LINEAR_VELOCITY = 0.44; // m/s
 const MAX_ANGULAR_VELOCITY = 2.0; // rad/s
 
+// Configurações do tilt da câmera
+const MIN_TILT_ANGLE = 15; // graus
+const MAX_TILT_ANGLE = 110; // graus
+const DEFAULT_TILT_ANGLE = 110; // graus
+
 // Estado atual do rover
 let currentLinearVelocity = 0;
 let currentAngularVelocity = 0;
+let currentTiltAngle = DEFAULT_TILT_ANGLE; // em graus
 
 // Controle de atualização
 let lastUpdate = 0;
@@ -50,6 +57,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Configurar botões
     setupEventListeners();
+    
+    // Inicializar displays
+    updateTiltDisplay(currentTiltAngle);
     
     console.log('[Gamepad Rover] Sistema inicializado');
 });
@@ -117,6 +127,20 @@ function sendCommand(v, w) {
     }
 }
 
+function sendTiltCommand(angleDegrees) {
+    if (ws && wsConnected) {
+        const alpha = angleDegrees * Math.PI / 180; // Converter para radianos
+        const cmd = { alpha };
+        
+        try {
+            ws.send(JSON.stringify(cmd));
+            console.log(`[Tilt] Ângulo enviado: ${angleDegrees.toFixed(1)}° (${alpha.toFixed(3)} rad)`);
+        } catch (error) {
+            console.error('[WebSocket] Erro ao enviar comando de tilt:', error);
+        }
+    }
+}
+
 // ===========================================
 // SISTEMA DE GAMEPAD
 // ===========================================
@@ -145,6 +169,10 @@ function initializeGamepadControl() {
             // Parar o rover quando o gamepad é desconectado
             sendCommand(0, 0);
             updateVelocityDisplays(0, 0);
+            // Resetar tilt para posição padrão
+            sendTiltCommand(DEFAULT_TILT_ANGLE);
+            updateTiltDisplay(DEFAULT_TILT_ANGLE);
+            currentTiltAngle = DEFAULT_TILT_ANGLE;
         }
     });
     
@@ -199,6 +227,9 @@ function processGamepadInputs(gamepad) {
     // Left joystick X para velocidade angular
     const leftStickX = gamepad.axes[0] || 0;
     
+    // Right joystick Y para controle de tilt da câmera
+    const rightStickY = gamepad.axes[3] || 0;
+    
     // Triggers para velocidade linear
     let leftTrigger = 0;
     let rightTrigger = 0;
@@ -213,6 +244,7 @@ function processGamepadInputs(gamepad) {
     
     // Aplicar dead zones
     const processedStickX = Math.abs(leftStickX) > GAMEPAD_DEAD_ZONE ? leftStickX : 0;
+    const processedRightStickY = Math.abs(rightStickY) > GAMEPAD_DEAD_ZONE ? rightStickY : 0;
     const processedLeftTrigger = leftTrigger > TRIGGER_DEAD_ZONE ? leftTrigger : 0;
     const processedRightTrigger = rightTrigger > TRIGGER_DEAD_ZONE ? rightTrigger : 0;
     
@@ -238,9 +270,21 @@ function processGamepadInputs(gamepad) {
     // Velocidade angular: Left stick X
     const angularVelocity = -processedStickX * MAX_ANGULAR_VELOCITY; // Negativo para inversão intuitiva
     
+    // Calcular ângulo de tilt da câmera: Right stick Y
+    // Mapear de -1 a 1 para MIN_TILT_ANGLE a MAX_TILT_ANGLE
+    // -1 (stick para cima) = ângulo máximo (110°)
+    // +1 (stick para baixo) = ângulo mínimo (15°)
+    let tiltAngle = currentTiltAngle;
+    if (processedRightStickY !== 0) {
+        const normalizedY = (processedRightStickY + 1) / 2; // Converter de [-1,1] para [0,1]
+        tiltAngle = MAX_TILT_ANGLE - normalizedY * (MAX_TILT_ANGLE - MIN_TILT_ANGLE);
+        tiltAngle = Math.max(MIN_TILT_ANGLE, Math.min(MAX_TILT_ANGLE, tiltAngle));
+    }
+    
     // Verificar se houve mudança significativa
     const linearDiff = Math.abs(linearVelocity - currentLinearVelocity);
     const angularDiff = Math.abs(angularVelocity - currentAngularVelocity);
+    const tiltDiff = Math.abs(tiltAngle - currentTiltAngle);
     
     if (linearDiff > 0.01 || angularDiff > 0.01) {
         currentLinearVelocity = linearVelocity;
@@ -251,6 +295,16 @@ function processGamepadInputs(gamepad) {
         
         // Atualizar displays
         updateVelocityDisplays(linearVelocity, angularVelocity);
+    }
+    
+    if (tiltDiff > 1.0) { // Sensibilidade de 1 grau
+        currentTiltAngle = tiltAngle;
+        
+        // Enviar comando de tilt
+        sendTiltCommand(tiltAngle);
+        
+        // Atualizar display
+        updateTiltDisplay(tiltAngle);
     }
 }
 
@@ -295,6 +349,13 @@ function updateVelocityDisplays(linear, angular) {
     
     linearDisplay.textContent = `${linear.toFixed(2)} m/s`;
     angularDisplay.textContent = `${angular.toFixed(2)} rad/s`;
+}
+
+function updateTiltDisplay(angleDegrees) {
+    const tiltDisplay = document.getElementById('tilt-angle-display');
+    if (tiltDisplay) {
+        tiltDisplay.textContent = `${angleDegrees.toFixed(1)}°`;
+    }
 }
 
 function updateSensorData(data) {
@@ -361,6 +422,11 @@ function setupEventListeners() {
         currentLinearVelocity = 0;
         currentAngularVelocity = 0;
         
+        // Resetar tilt para posição padrão
+        sendTiltCommand(DEFAULT_TILT_ANGLE);
+        updateTiltDisplay(DEFAULT_TILT_ANGLE);
+        currentTiltAngle = DEFAULT_TILT_ANGLE;
+        
         // Adicionar feedback visual
         emergencyBtn.classList.add('active');
         setTimeout(() => {
@@ -394,6 +460,8 @@ window.addEventListener('beforeunload', function() {
     if (ws && wsConnected) {
         // Parar o rover antes de fechar a página
         sendCommand(0, 0);
+        // Resetar tilt para posição padrão
+        sendTiltCommand(DEFAULT_TILT_ANGLE);
         ws.close();
     }
 });
