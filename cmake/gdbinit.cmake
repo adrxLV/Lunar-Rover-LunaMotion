@@ -1,0 +1,1 @@
+configure_file(".gdbinit.in" "${CMAKE_CURRENT_BINARY_DIR}/.gdbinit")

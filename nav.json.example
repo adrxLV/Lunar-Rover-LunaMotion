@@ -1,0 +1,14 @@
+{
+    "rover": {
+        "wheelbase": 0.468,
+        "wheel_radius": 0.1
+    },
+    "navigator": {
+        "K_ATT": 0.1,
+        "K_REP": 50.0,
+        "RHO_0": 0.3,
+        "K_THETA": 2.0,
+        "V_MAX": 0.5,
+        "W_MAX": 1.0,
+    }
+}

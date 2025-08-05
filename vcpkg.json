@@ -1,0 +1,13 @@
+{
+  "name": "lunar-rover-nav",
+  "version-semver": "0.1.0",
+  "dependencies": [
+    "boost-log",
+    "boost-program-options",
+    "boost-json",
+    "boost-asio",
+    "fmt",
+    "cppzmq",
+    "nlohmann-json"
+  ]
+}

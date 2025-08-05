@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Rover</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 2rem;
+      background-color: #f0f0f0;
+    }
+    h1 {
+      font-size: 24px;
+      margin-bottom: 1rem;
+    }
+    textarea {
+      width: 100%;
+      height: 200px;
+      padding: 1rem;
+      font-size: 1rem;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+  </style>
+</head>
+<body>
+  <h1>Rover</h1>
+  <label for="v_slider">Linear velocity (m/s): <span id="v_value">0</span></label>
+  <br>
+  <input type="range" id="v_slider" min="-0.44" max="0.44" step="0.01" value="0">
+  <br>
+  <label for="w_slider">Angular velocity (rad/s): <span id="w_value">0</span></label>
+  <br>
+  <input type="range" id="w_slider" min="-3.5" max="3.5" step="0.2" value="0">
+  <br>
+  <label for="a_slider">Camera Tilt Angle (deg): <span id="a_value">110</span></label>
+  <br>
+  <input type="range" id="a_slider" min="15" max="110" step="15" value="110">
+  <br>
+  <textarea id="sensors-data" ></textarea>
+
+  <script>
+      let v = 0;
+      let w = 0;
+      let alpha = 110*3.14/180;
+
+      let ws = new WebSocket("ws://localhost:8000/ws");
+      ws.onmessage = function(event) {
+          let messages = document.getElementById('sensors-data')
+          let data = JSON.parse(event.data);
+          console.log(data);
+
+          let formattedJson = JSON.stringify(data, null, 2);
+          messages.value = formattedJson;
+      };
+
+      function emit_motor_command() {
+        const cmd = {
+          "v":  v,
+          "w": w
+        };
+        ws.send(JSON.stringify(cmd));
+      }
+      function emit_tilt_command() {
+        const cmd = { alpha };
+        ws.send(JSON.stringify(cmd));
+      }
+
+      const v_slider = document.getElementById('v_slider');
+      const v_valueDisplay = document.getElementById('v_value');
+
+      v_valueDisplay.textContent = Number(v_slider.value).toFixed(2);
+
+      v_slider.oninput = function() {
+        v = Number(this.value);
+        v_valueDisplay.textContent = v.toFixed(2);
+        emit_motor_command();
+      }
+
+      const w_slider = document.getElementById('w_slider');
+      const w_valueDisplay = document.getElementById('w_value');
+
+      w_valueDisplay.textContent = Number(w_slider.value).toFixed(2);
+
+      w_slider.oninput = function() {
+        w = Number(this.value);
+        w_valueDisplay.textContent = w.toFixed(2);
+        emit_motor_command();
+      }
+
+      const a_slider = document.getElementById('a_slider');
+      const a_valueDisplay = document.getElementById('a_value');
+
+      a_valueDisplay.textContent = Number(a_slider.value).toFixed(2);
+
+      a_slider.oninput = function() {
+        alpha = Number(this.value)*3.14/180;
+        a_valueDisplay.textContent = (alpha*180/3.14).toFixed(2);
+        emit_tilt_command();
+      }
+
+  </script>
+</body>
+</html>
