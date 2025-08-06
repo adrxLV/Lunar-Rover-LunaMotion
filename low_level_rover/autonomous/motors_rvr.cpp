@@ -1,7 +1,7 @@
-#include "car_control.h"
-#include "SoftPWM.h"
+#include "motors_rvr.h"
 #include <math.h>
 #include "parser.h"
+#include "PlatformOps.h"
 
 #define NUM_PWMS 13
 #define MOTORS_PAYLOAD_NUM 2
@@ -18,15 +18,15 @@ typedef struct{
   float speedLeft;
   float speedRight;
 }payload_motors;
-
+static bool MotorRunning;
 payload_motors payload;
 
 SunFounder_cfg left_Motor = {.pwm = 0.0,
-                             .forward_pin = 2,
-                             .backward_pin = 3};
+                            .forward_pin = 2,
+                            .backward_pin = 3};
 SunFounder_cfg right_Motor = {.pwm = 0.0,
-                              .forward_pin = 5,
-                              .backward_pin = 4};
+                             .forward_pin = 5,
+                             .backward_pin = 4};
 
 /*
 * <<<<<<<<<<<<<<<<<<<<<<<<< IMPORTANT INFORMATION >>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -46,19 +46,19 @@ void car_update(void){
 
   //left wheel
   if(left_Motor.pwm >= 0) {
-    SoftPWMSet(left_Motor.forward_pin, left_Motor.pwm);
-    SoftPWMSet(left_Motor.backward_pin, 0);
+   SoftPWMSet(left_Motor.forward_pin, left_Motor.pwm);
+   SoftPWMSet(left_Motor.backward_pin, 0);
   } else {
-    SoftPWMSet(left_Motor.forward_pin, 0);
-    SoftPWMSet(left_Motor.backward_pin, abs(left_Motor.pwm));
+   SoftPWMSet(left_Motor.forward_pin, 0);
+   SoftPWMSet(left_Motor.backward_pin, abs(left_Motor.pwm));
   }
   //right wheel
   if(right_Motor.pwm > 0) {
-    SoftPWMSet(right_Motor.forward_pin, abs(right_Motor.pwm));
-    SoftPWMSet(right_Motor.backward_pin, 0);
+   SoftPWMSet(right_Motor.forward_pin, abs(right_Motor.pwm));
+   SoftPWMSet(right_Motor.backward_pin, 0);
   } else {
-    SoftPWMSet(right_Motor.forward_pin, 0);
-    SoftPWMSet(right_Motor.backward_pin, abs(right_Motor.pwm));
+   SoftPWMSet(right_Motor.forward_pin, 0);
+   SoftPWMSet(right_Motor.backward_pin, abs(right_Motor.pwm));
   }
   
 }
@@ -78,14 +78,25 @@ int parser_motors(String *data){
     return -1;    // more payloads than required
 }
 
-int parser_motors(Frame * p_frm){
+int parser_motors(const Frame * p_frm){
 
     if(abs(p_frm->val1) > PWM_MAX || abs(p_frm->val2) > PWM_MAX )
         return -1;
-    payload.speedLeft = p_frm->val1;//.toFloat();
-    payload.speedRight = p_frm->val2;//.toFloat();
+    payload.speedLeft = (float)p_frm->val1;//.toFloat();
+    payload.speedRight = (float) p_frm->val2;//.toFloat();
+
+    if (p_frm->val1 > 0 || p_frm->val2 > 0) {
+        MotorRunning = true;
+    }
+    else
+        MotorRunning = false;
 
     car_update();
     return 0;
 
+}
+
+bool motors_in_motion(void)
+{
+    return MotorRunning;
 }

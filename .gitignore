@@ -19,3 +19,8 @@ central_system_db.db
 .config.*
 __pycache__
 nav.json
+<<<<<<< HEAD
+venv/
+=======
+*.swu
+>>>>>>> ce374dc1f96af52f746fdb340051b4670adac31d

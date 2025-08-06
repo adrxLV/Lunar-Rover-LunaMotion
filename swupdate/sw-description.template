@@ -1,0 +1,25 @@
+software =
+{
+    version = "/*VERSION_PLACEHOLDER*/";
+    description = "Software update for SLI lunar rover";
+    reboot = false;
+
+    sli-lunar-rover = {
+        hardware-compatibility: [ "1.0" ];
+        
+        files: (
+            {
+                filename = "lunar-rover-nav";          
+                path = "/usr/bin/lunar-rover-nav";
+                sha256 = "/*SHA256_PLACEHOLDER*/";
+            }
+        );
+        scripts: (
+            {
+                filename = "lunar-rover-shellscript.sh"
+                type = "shellscript"
+                sha256 = "/*SH_SHA256_PLACEHOLDER*/"
+            }
+        );
+    }
+}

@@ -316,6 +316,7 @@ void Rover::handle_motors_command(const std::string& command) {
 
     if(!j.contains("v") || !j.contains("w")) {
         BOOST_LOG_TRIVIAL(error) << "[motor_commands_executor] Invalid command. Expected v and w";
+        return;
     }
 
     const auto v_ = j["v"];
@@ -323,6 +324,7 @@ void Rover::handle_motors_command(const std::string& command) {
 
     if(!v_.is_number() || !w_.is_number() ) {
         BOOST_LOG_TRIVIAL(error) << "[motor_commands_executor] Invalid command. Expected v and w as numbers";
+        return;
     }
 
     double v = v_.get<double>();
@@ -345,6 +347,7 @@ void Rover::handle_tilt_motor_command(const std::string& command) {
 
     if(!alpha_.is_number()) {
         BOOST_LOG_TRIVIAL(error) << "[motor_commands_executor] Invalid command. Expected alpha as number";
+        return;
     }
 
     double alpha = alpha_.get<double>();

@@ -14,7 +14,7 @@
     <!-- Left Side Panel -->
     <div class="side-panel left-panel">
       <div class="logo-section">
-        <img src="../ASSETS/FULLTRANSPARENT Branco 1.png" alt="Rover Logo" class="logo">
+        <img src="FULLTRANSPARENT Branco.png" alt="Rover Logo" class="logo">
       </div>
       <div class="datetime-section">
         <span class="datetime-text" id="current-datetime">DATE: -- / -- / ---- | --:-- GMT+0</span>
@@ -32,6 +32,27 @@
           <div class="status-indicator" id="gamepad-indicator">
             <div class="status-dot" id="gamepad-dot"></div>
             <span id="gamepad-status-text">Disconnected</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Camera Stream Section -->
+      <div class="camera-stream-section">
+        <div class="camera-header">
+          <span class="camera-title">Rover Camera Stream</span>
+          <div class="camera-controls">
+            <button class="stream-btn stop" id="stop-stream-btn">Stop Stream</button>
+          </div>
+        </div>
+        <div class="video-container">
+          <video id="rover-stream" autoplay muted playsinline class="rover-video">
+            <p>Your browser does not support the video element or WebRTC.</p>
+          </video>
+          <div class="stream-overlay" id="stream-overlay">
+            <div class="stream-status">
+              <div class="stream-icon">📹</div>
+              <span id="stream-status-text">Connecting to rover camera...</span>
+            </div>
           </div>
         </div>
       </div>
@@ -55,28 +76,6 @@
               <span class="control-value" id="angular-velocity-display">0.00 rad/s</span>
             </div>
           </div>
-          <div class="control-item">
-            <img src="../ASSETS/CompassIcon.svg" alt="Camera Tilt" class="control-icon">
-            <div class="control-details">
-              <span class="control-label">Camera Tilt Angle</span>
-              <span class="control-description">Right Joystick Y</span>
-              <span class="control-value" id="tilt-angle-display">110.0°</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Sensor Data Section -->
-      <div class="sensor-data-section">
-        <div class="sensor-header">
-          <span class="sensor-title">Real-time Sensor Data</span>
-          <div class="connection-status" id="ws-status">
-            <div class="status-dot" id="ws-dot"></div>
-            <span id="ws-status-text">Disconnected</span>
-          </div>
-        </div>
-        <div class="sensor-data-container">
-          <textarea id="sensors-data" readonly placeholder="Waiting for sensor data..."></textarea>
         </div>
       </div>
 
@@ -95,11 +94,18 @@
     <!-- Right Side Panel -->
     <div class="side-panel right-panel">
       <div class="side-controls">
-        <div class="emergency-section">
-          <button class="emergency-btn" id="emergency-stop">
-            <img src="../ASSETS/Vector.svg" alt="Emergency Stop">
-            <span>EMERGENCY STOP</span>
-          </button>
+        <!-- Sensor Data Section -->
+        <div class="sensor-data-section">
+          <div class="sensor-header">
+            <span class="sensor-title">Real-time Sensor Data</span>
+            <div class="connection-status" id="ws-status">
+              <div class="status-dot" id="ws-dot"></div>
+              <span id="ws-status-text">Disconnected</span>
+            </div>
+          </div>
+          <div class="sensor-data-container">
+            <textarea id="sensors-data" readonly placeholder="Waiting for sensor data..."></textarea>
+          </div>
         </div>
       </div>
     </div>

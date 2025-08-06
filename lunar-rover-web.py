@@ -88,4 +88,4 @@ async def websocket_endpoint(websocket: WebSocket):
 
 # serve app
 if __name__ == "__main__":
-    uvicorn.run("lunar-rover-web:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("lunar-rover-web:app", host="localhost", port=8000, reload=True)

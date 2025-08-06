@@ -1,11 +1,3 @@
-/**
- * GAMEPAD ROVER CONTROL SYSTEM
- * Sistema de controle do rover usando Xbox gamepad
- * R/L Triggers para velocidade linear
- * Left Joystick X para velocidade angular
- * Right Joystick Y para controle de tilt da câmera
- */
-
 // ===========================================
 // CONFIGURAÇÃO DE VARIÁVEIS DO ROVER
 // ===========================================
@@ -21,23 +13,22 @@ const TRIGGER_SENSITIVITY = 0.3; // Fator de sensibilidade dos triggers (0.1 = b
 const MAX_LINEAR_VELOCITY = 0.44; // m/s
 const MAX_ANGULAR_VELOCITY = 2.0; // rad/s
 
-// Configurações do tilt da câmera
-const MIN_TILT_ANGLE = 15; // graus
-const MAX_TILT_ANGLE = 110; // graus
-const DEFAULT_TILT_ANGLE = 110; // graus
-
 // Estado atual do rover
 let currentLinearVelocity = 0;
 let currentAngularVelocity = 0;
-let currentTiltAngle = DEFAULT_TILT_ANGLE; // em graus
 
-// Controle de atualização
+// Atualização
 let lastUpdate = 0;
-const UPDATE_INTERVAL = 50; // 20 Hz
+const UPDATE_INTERVAL = 60; 
 
 // Log de comandos
 let commandsLog = [];
 const MAX_LOG_ENTRIES = 50;
+
+// Variáveis do stream da câmera
+let streamActive = false;
+let roverIp = '';
+let streamUrl = '';
 
 // ===========================================
 // INICIALIZAÇÃO
@@ -45,21 +36,23 @@ const MAX_LOG_ENTRIES = 50;
 document.addEventListener('DOMContentLoaded', function() {
     console.log('[Gamepad Rover] Inicializando sistema de controle...');
     
-    // Inicializar WebSocket
+    // Iniciar WebSocket
     initializeWebSocket();
     
-    // Inicializar controle do gamepad
+    // Iniciar controle do gamepad
     initializeGamepadControl();
     
-    // Atualizar data/hora
+    // Iniciar data/hora
     updateDateTime();
     setInterval(updateDateTime, 1000);
     
     // Configurar botões
     setupEventListeners();
     
-    // Inicializar displays
-    updateTiltDisplay(currentTiltAngle);
+    // Iniciar stream da câmera automaticamente
+    setTimeout(() => {
+        startCameraStream('lunar-rover-0.eec');
+    }, 1000); // Aguardar 1 segundo para garantir que a página carregou completamente
     
     console.log('[Gamepad Rover] Sistema inicializado');
 });
@@ -127,20 +120,6 @@ function sendCommand(v, w) {
     }
 }
 
-function sendTiltCommand(angleDegrees) {
-    if (ws && wsConnected) {
-        const alpha = angleDegrees * Math.PI / 180; // Converter para radianos
-        const cmd = { alpha };
-        
-        try {
-            ws.send(JSON.stringify(cmd));
-            console.log(`[Tilt] Ângulo enviado: ${angleDegrees.toFixed(1)}° (${alpha.toFixed(3)} rad)`);
-        } catch (error) {
-            console.error('[WebSocket] Erro ao enviar comando de tilt:', error);
-        }
-    }
-}
-
 // ===========================================
 // SISTEMA DE GAMEPAD
 // ===========================================
@@ -151,7 +130,6 @@ function initializeGamepadControl() {
         return;
     }
     
-    // Event listeners para conexão/desconexão
     window.addEventListener('gamepadconnected', function(e) {
         console.log(`[Gamepad] Conectado: ${e.gamepad.id}`);
         gamepadIndex = e.gamepad.index;
@@ -166,17 +144,11 @@ function initializeGamepadControl() {
             gamepadIndex = -1;
             gamepadActive = false;
             updateGamepadStatus(false, 'Desconectado');
-            // Parar o rover quando o gamepad é desconectado
             sendCommand(0, 0);
             updateVelocityDisplays(0, 0);
-            // Resetar tilt para posição padrão
-            sendTiltCommand(DEFAULT_TILT_ANGLE);
-            updateTiltDisplay(DEFAULT_TILT_ANGLE);
-            currentTiltAngle = DEFAULT_TILT_ANGLE;
         }
     });
     
-    // Verificar se já existe um gamepad conectado
     const gamepads = navigator.getGamepads();
     for (let i = 0; i < gamepads.length; i++) {
         if (gamepads[i]) {
@@ -206,17 +178,14 @@ function startGamepadLoop() {
             return;
         }
         
-        // Controlar frequência de atualização
         if (timestamp - lastUpdate < UPDATE_INTERVAL) {
             requestAnimationFrame(gamepadLoop);
             return;
         }
         lastUpdate = timestamp;
         
-        // Processar inputs do gamepad
         processGamepadInputs(gamepad);
         
-        // Continuar o loop
         requestAnimationFrame(gamepadLoop);
     }
     
@@ -224,42 +193,29 @@ function startGamepadLoop() {
 }
 
 function processGamepadInputs(gamepad) {
-    // Left joystick X para velocidade angular
     const leftStickX = gamepad.axes[0] || 0;
     
-    // Right joystick Y para controle de tilt da câmera
-    const rightStickY = gamepad.axes[3] || 0;
-    
-    // Triggers para velocidade linear
     let leftTrigger = 0;
     let rightTrigger = 0;
     
-    // Tentar obter valores dos triggers (diferentes navegadores/gamepads podem usar métodos diferentes)
     if (gamepad.axes.length > 6) leftTrigger = Math.max(0, gamepad.axes[6]);
     if (gamepad.axes.length > 7) rightTrigger = Math.max(0, gamepad.axes[7]);
     
-    // Fallback para botões se os eixos não estiverem disponíveis
     if (leftTrigger === 0 && gamepad.buttons[6]) leftTrigger = gamepad.buttons[6].value;
     if (rightTrigger === 0 && gamepad.buttons[7]) rightTrigger = gamepad.buttons[7].value;
     
-    // Aplicar dead zones
     const processedStickX = Math.abs(leftStickX) > GAMEPAD_DEAD_ZONE ? leftStickX : 0;
-    const processedRightStickY = Math.abs(rightStickY) > GAMEPAD_DEAD_ZONE ? rightStickY : 0;
     const processedLeftTrigger = leftTrigger > TRIGGER_DEAD_ZONE ? leftTrigger : 0;
     const processedRightTrigger = rightTrigger > TRIGGER_DEAD_ZONE ? rightTrigger : 0;
     
-    // Aplicar curva de sensibilidade aos triggers (para controle mais suave)
     function applySensitivityCurve(value) {
         if (value === 0) return 0;
-        // Curva quadrática para sensibilidade mais baixa no início
         return Math.pow(value, 2) * TRIGGER_SENSITIVITY + value * (1 - TRIGGER_SENSITIVITY);
     }
     
     const sensitizedLeftTrigger = applySensitivityCurve(processedLeftTrigger);
     const sensitizedRightTrigger = applySensitivityCurve(processedRightTrigger);
     
-    // Calcular velocidades
-    // Velocidade linear: R trigger = frente, L trigger = trás
     let linearVelocity = 0;
     if (sensitizedRightTrigger > 0) {
         linearVelocity = sensitizedRightTrigger * MAX_LINEAR_VELOCITY;
@@ -267,49 +223,31 @@ function processGamepadInputs(gamepad) {
         linearVelocity = -sensitizedLeftTrigger * MAX_LINEAR_VELOCITY;
     }
     
-    // Velocidade angular: Left stick X
-    const angularVelocity = -processedStickX * MAX_ANGULAR_VELOCITY; // Negativo para inversão intuitiva
+    const angularVelocity = -processedStickX * MAX_ANGULAR_VELOCITY;
     
-    // Calcular ângulo de tilt da câmera: Right stick Y
-    // Mapear de -1 a 1 para MIN_TILT_ANGLE a MAX_TILT_ANGLE
-    // -1 (stick para cima) = ângulo máximo (110°)
-    // +1 (stick para baixo) = ângulo mínimo (15°)
-    let tiltAngle = currentTiltAngle;
-    if (processedRightStickY !== 0) {
-        const normalizedY = (processedRightStickY + 1) / 2; // Converter de [-1,1] para [0,1]
-        tiltAngle = MAX_TILT_ANGLE - normalizedY * (MAX_TILT_ANGLE - MIN_TILT_ANGLE);
-        tiltAngle = Math.max(MIN_TILT_ANGLE, Math.min(MAX_TILT_ANGLE, tiltAngle));
-    }
+    // Reduzir velocidade linear baseada na velocidade angular
+    // Quanto maior a velocidade angular, menor a velocidade linear (mínimo 50%)
+    if (linearVelocity !== 0 && Math.abs(angularVelocity) > 0) {
+        const angularFactor = Math.abs(angularVelocity) / MAX_ANGULAR_VELOCITY; // 0 a 1
+        const reductionFactor = 1 - (angularFactor * 0.5); // 1 a 0.5 (50% redução máxima)
+        linearVelocity *= reductionFactor;
+    } 
     
-    // Verificar se houve mudança significativa
     const linearDiff = Math.abs(linearVelocity - currentLinearVelocity);
     const angularDiff = Math.abs(angularVelocity - currentAngularVelocity);
-    const tiltDiff = Math.abs(tiltAngle - currentTiltAngle);
     
     if (linearDiff > 0.01 || angularDiff > 0.01) {
         currentLinearVelocity = linearVelocity;
         currentAngularVelocity = angularVelocity;
         
-        // Enviar comando para o rover
         sendCommand(linearVelocity, angularVelocity);
         
-        // Atualizar displays
         updateVelocityDisplays(linearVelocity, angularVelocity);
-    }
-    
-    if (tiltDiff > 1.0) { // Sensibilidade de 1 grau
-        currentTiltAngle = tiltAngle;
-        
-        // Enviar comando de tilt
-        sendTiltCommand(tiltAngle);
-        
-        // Atualizar display
-        updateTiltDisplay(tiltAngle);
     }
 }
 
 // ===========================================
-// INTERFACE DE USUÁRIO
+// INTERFACE DO UTILIZADOR
 // ===========================================
 function updateGamepadStatus(connected, info = '') {
     const indicator = document.getElementById('gamepad-indicator');
@@ -349,13 +287,6 @@ function updateVelocityDisplays(linear, angular) {
     
     linearDisplay.textContent = `${linear.toFixed(2)} m/s`;
     angularDisplay.textContent = `${angular.toFixed(2)} rad/s`;
-}
-
-function updateTiltDisplay(angleDegrees) {
-    const tiltDisplay = document.getElementById('tilt-angle-display');
-    if (tiltDisplay) {
-        tiltDisplay.textContent = `${angleDegrees.toFixed(1)}°`;
-    }
 }
 
 function updateSensorData(data) {
@@ -413,37 +344,129 @@ function updateCommandsLog() {
 }
 
 function setupEventListeners() {
-    // Botão de emergência
-    const emergencyBtn = document.getElementById('emergency-stop');
-    emergencyBtn.addEventListener('click', function() {
-        console.log('[Emergency] Parada de emergência ativada');
-        sendCommand(0, 0);
-        updateVelocityDisplays(0, 0);
-        currentLinearVelocity = 0;
-        currentAngularVelocity = 0;
-        
-        // Resetar tilt para posição padrão
-        sendTiltCommand(DEFAULT_TILT_ANGLE);
-        updateTiltDisplay(DEFAULT_TILT_ANGLE);
-        currentTiltAngle = DEFAULT_TILT_ANGLE;
-        
-        // Adicionar feedback visual
-        emergencyBtn.classList.add('active');
-        setTimeout(() => {
-            emergencyBtn.classList.remove('active');
-        }, 500);
-    });
-    
     // Botão de limpar log
     const clearLogBtn = document.getElementById('clear-log-btn');
     clearLogBtn.addEventListener('click', function() {
         commandsLog = [];
         updateCommandsLog();
     });
+    
+    // Botão de parar stream da câmera
+    const stopStreamBtn = document.getElementById('stop-stream-btn');
+    stopStreamBtn.addEventListener('click', function() {
+        stopCameraStream();
+    });
 }
 
 // ===========================================
-// TRATAMENTO DE ERROS
+// CONTROLE DO STREAM DA CÂMERA
+// ===========================================
+function startCameraStream(ip) {
+    console.log(`[Camera] Iniciando stream da câmera para IP: ${ip}`);
+    
+    const video = document.getElementById('rover-stream');
+    const overlay = document.getElementById('stream-overlay');
+    const statusText = document.getElementById('stream-status-text');
+    const stopBtn = document.getElementById('stop-stream-btn');
+    
+    // Validar IP/domínio
+    if (!ip) {
+        console.error('[Camera] IP/domínio não fornecido');
+        updateStreamStatus('Erro: IP/domínio inválido');
+        return;
+    }
+    
+    roverIp = ip;
+    streamUrl = `rtsp://${ip}:8554/stream`;
+    
+    // Atualizar status
+    updateStreamStatus('Conectando...');
+    
+    try {
+        // Para streams RTSP em navegadores, precisamos usar uma solução alternativa
+        // Como o navegador não suporta RTSP nativamente, vamos tentar usar HLS ou WebRTC
+        
+        // Primeiro, tentar conectar via WebSocket para converter RTSP em WebRTC
+        const wsStreamUrl = `ws://${ip}:8080/stream`; // Assumindo que há um servidor WebSocket para conversão
+        
+        // Como alternativa, vamos criar um proxy HTTP para o stream
+        const httpStreamUrl = `http://${ip}:8080/stream.m3u8`; // Stream HLS
+        
+        // Tentar configurar o stream
+        video.src = httpStreamUrl;
+        video.load();
+        
+        video.onloadstart = function() {
+            console.log('[Camera] Carregando stream...');
+            updateStreamStatus('Carregando stream...');
+        };
+        
+        video.onloadeddata = function() {
+            console.log('[Camera] Stream carregado com sucesso');
+            streamActive = true;
+            overlay.classList.add('hidden');
+            stopBtn.disabled = false;
+            updateStreamStatus('Stream ativo');
+        };
+        
+        video.onerror = function(e) {
+            console.error('[Camera] Erro ao carregar stream:', e);
+            streamActive = false;
+            overlay.classList.remove('hidden');
+            stopBtn.disabled = true;
+            updateStreamStatus('Erro: Não foi possível conectar ao stream. Verifique se o rover está ligado e acessível.');
+            
+            // Tentar método alternativo - usar mjpeg
+            console.log('[Camera] Tentando MJPEG stream...');
+            const mjpegUrl = `http://${ip}:8080/stream.mjpg`;
+            video.src = mjpegUrl;
+        };
+        
+        video.onplay = function() {
+            console.log('[Camera] Stream reproduzindo');
+        };
+        
+    } catch (error) {
+        console.error('[Camera] Erro ao inicializar stream:', error);
+        streamActive = false;
+        overlay.classList.remove('hidden');
+        stopBtn.disabled = true;
+        updateStreamStatus('Erro: Falha ao inicializar stream');
+    }
+}
+
+function stopCameraStream() {
+    console.log('[Camera] Parando stream da câmera');
+    
+    const video = document.getElementById('rover-stream');
+    const overlay = document.getElementById('stream-overlay');
+    const stopBtn = document.getElementById('stop-stream-btn');
+    
+    // Parar o vídeo
+    video.pause();
+    video.src = '';
+    video.load();
+    
+    // Resetar estado
+    streamActive = false;
+    overlay.classList.remove('hidden');
+    stopBtn.disabled = true;
+    
+    updateStreamStatus('Stream parado');
+    
+    console.log('[Camera] Stream parado com sucesso');
+}
+
+function updateStreamStatus(message) {
+    const statusText = document.getElementById('stream-status-text');
+    if (statusText) {
+        statusText.textContent = message;
+    }
+    console.log(`[Camera Status] ${message}`);
+}
+
+// ===========================================
+// ERROS
 // ===========================================
 window.addEventListener('error', function(event) {
     console.error('[System Error]', event.error);
@@ -454,14 +477,11 @@ window.addEventListener('unhandledrejection', function(event) {
 });
 
 // ===========================================
-// CLEANUP
+// PARAR ANTES DE FECHAR A PAG
 // ===========================================
 window.addEventListener('beforeunload', function() {
     if (ws && wsConnected) {
-        // Parar o rover antes de fechar a página
         sendCommand(0, 0);
-        // Resetar tilt para posição padrão
-        sendTiltCommand(DEFAULT_TILT_ANGLE);
         ws.close();
     }
 });

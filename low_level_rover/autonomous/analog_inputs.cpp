@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include "analog_inputs.h"
-#include "sendRasp.h"
 /* MACROS -------------------------------------------------------------------------- */
 #define NUM_PINS  3 // Currently Reading 2 Analog Pins
 #define LUT_SIZE 11

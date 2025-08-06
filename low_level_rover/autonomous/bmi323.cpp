@@ -27,10 +27,22 @@
  */
 
 #include "bmi323.h"
+#include "PlatformOps.h"
 
 //=============================================================================
 // PRIVATE VARIABLES
 //=============================================================================
+
+/**
+ * @brief BMI323 configuration structure
+ * 
+ * Contains sensor configuration parameters
+ */
+typedef struct {
+    uint8_t i2c_address;    ///< Current I2C address being used
+    bool initialized;       ///< Initialization status flag
+    uint32_t last_read_time;///< Last successful read timestamp
+} bmi323_config_t;
 
 bmi323_data_t sensor_data;        ///< Internal sensor data storage
 static bmi323_config_t config;           ///< Internal configuration storage
@@ -136,9 +148,9 @@ static bool bmi323_soft_reset(void) {
     }
 }
 
-//=============================================================================
-// PUBLIC INITIALIZATION FUNCTIONS
-//=============================================================================
+// //=============================================================================
+// // PUBLIC INITIALIZATION FUNCTIONS
+// //=============================================================================
 
 bool bmi323_check_connection(void) {
     uint16_t chip_id;

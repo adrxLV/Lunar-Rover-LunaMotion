@@ -1,10 +1,10 @@
 #include "HardwareSerial.h"
 #include "parser.h"
-#include "car_control.h"
+#include "motors_rvr.h"
 #include "servo_control.h"
 #include <math.h>
 #include "fsm_rvr.h"
-//#include "rvr_fsm.h"
+#include "PlatformOps.h"
 
 /*
 * INPUT: YY xxx xxx\r\n
@@ -82,26 +82,26 @@ int scanner(String str) {
 
 
 
-int parser (void){
-  int a;
-  for (a = 0; a < COMMANDS; a++){
-    if(data[0] == headers[a])
-      break;
-  }
-  switch (a){
-    case MOTORS:
-      parser_funcs[MOTORS](data);
-      clear_data();
-      return 0;
-    case SERVO:
-      parser_funcs[SERVO](data);
-      clear_data();
-      return 0;
-    default:
-      clear_data();
-      return -1;
-  }
-}
+// int parser (void){
+//   int a;
+//   for (a = 0; a < COMMANDS; a++){
+//     if(data[0] == headers[a])
+//       break;
+//   }
+//   switch (a){
+//     case MOTORS:
+//       parser_funcs[MOTORS](data);
+//       clear_data();
+//       return 0;
+//     case SERVO:
+//       parser_funcs[SERVO](data);
+//       clear_data();
+//       return 0;
+//     default:
+//       clear_data();
+//       return -1;
+//   }
+// }
 
 // Clear data string array
 void clear_data (void){
@@ -170,36 +170,34 @@ bool parseFrame(const String& rawInput, Frame& frame) {
 int executeCommand(const Frame& f) {
     int ret = 0;
     Frame temp;
-    float ms;
-    // uint16_t reg;
     //Serial.println("Execute Command");
     switch (f.type) {
     case CMD_START: 
-        TCCR1B=0;
+        ret = (int)RUNNING;
+        timer1_stop();
         // Serial.println("CMD START");
         // Serial.println(f.length);
         // Serial.println(f.val1);
 
         if(f.length == 1){
           if(f.val1>=20 && f.val1 <=1000){
-            ms = f.val1;
-            ms = 15625 * ms/1000 -1;
-            OCR1A = (uint16_t)ms;
-            Serial.println(ms);
+
+
+            timer1_start(f.val1);
+            //Serial.println(ms);
           }
         }
+        else {
+            timer1_start();
+        }
         //Serial.println("Action: System STARTED"); 
-        ret = (int)RUNNING;
-          // Modo CTC
-        TCCR1B |= (1 << WGM12);
-        // Prescaler 1024
-        TCCR1B |= (1 << CS12) | (1 << CS10);
+       
         StatusRunning = true;
         break;
     case CMD_STOP:  
         //Serial.println("Action: System STOPPED"); 
         ret = (int)READY;
-        TCCR1B = 0;
+        timer1_stop();
         temp.cmd = CMD_WS;
         temp.val1=0;
         temp.val2=0;
@@ -214,6 +212,7 @@ int executeCommand(const Frame& f) {
         //Serial.println(f.val2);
         if(StatusRunning){
           parser_motors(&f);
+          ack_receiving_speed_frames();
           ret = RUNNING;
         }
         else

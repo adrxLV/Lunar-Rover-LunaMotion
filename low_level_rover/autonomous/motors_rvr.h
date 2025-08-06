@@ -1,7 +1,7 @@
 #ifndef __CAR_CONTROL_H__
 #define __CAR_CONTROL_H__
 
-#include <Arduino.h>
+#include "PlatformOps.h"
 #include <stdint.h>
 
 #include "parser.h"
@@ -16,6 +16,7 @@
  */
 
 int parser_motors(String* );
-int parser_motors(Frame * p_frm);
+int parser_motors(const Frame * p_frm);
+bool motors_in_motion(void);
 #endif // __CAR_CONTROL_H__
 

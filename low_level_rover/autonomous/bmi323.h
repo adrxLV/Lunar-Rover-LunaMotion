@@ -46,8 +46,8 @@
 #ifndef BMI323_H
 #define BMI323_H
 
-#include <Arduino.h>
-#include <Wire.h>
+//#include <Arduino.h>
+//#include <Wire.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -118,17 +118,6 @@ typedef struct {
     uint8_t status;         ///< Sensor status register value
 } bmi323_data_t;
 
-/**
- * @brief BMI323 configuration structure
- * 
- * Contains sensor configuration parameters
- */
-typedef struct {
-    uint8_t i2c_address;    ///< Current I2C address being used
-    bool initialized;       ///< Initialization status flag
-    uint32_t last_read_time;///< Last successful read timestamp
-} bmi323_config_t;
-
 //=============================================================================
 // INITIALIZATION & CONTROL FUNCTIONS
 //=============================================================================
@@ -170,13 +159,6 @@ bool bmi323_init(void);
  * @note This function is called automatically by bmi323_init()
  */
 bool bmi323_check_connection(void);
-
-/**
- * @brief Get current sensor configuration
- * 
- * @return Pointer to configuration structure
- */
-const bmi323_config_t* bmi323_get_config(void);
 
 //=============================================================================
 // DATA READING FUNCTIONS
@@ -245,47 +227,6 @@ void bmi323_test_loop(void);
 // CONVERTED DATA GETTERS (Physical Units)
 //=============================================================================
 
-/**
- * @brief Get X-axis acceleration in gravity units
- * @return X-axis acceleration in g (1g = 9.81 m/s²)
- * @note Range: ±4g, Resolution: ~0.12 mg
- */
-float bmi323_get_accel_x_g(void);
-
-/**
- * @brief Get Y-axis acceleration in gravity units
- * @return Y-axis acceleration in g (1g = 9.81 m/s²)
- * @note Range: ±4g, Resolution: ~0.12 mg
- */
-float bmi323_get_accel_y_g(void);
-
-/**
- * @brief Get Z-axis acceleration in gravity units
- * @return Z-axis acceleration in g (1g = 9.81 m/s²)
- * @note Range: ±4g, Resolution: ~0.12 mg
- */
-float bmi323_get_accel_z_g(void);
-
-/**
- * @brief Get X-axis rotation rate in degrees per second
- * @return X-axis angular velocity in °/s
- * @note Range: ±1000°/s, Resolution: ~0.03°/s
- */
-float bmi323_get_gyro_x_dps(void);
-
-/**
- * @brief Get Y-axis rotation rate in degrees per second
- * @return Y-axis angular velocity in °/s
- * @note Range: ±1000°/s, Resolution: ~0.03°/s
- */
-float bmi323_get_gyro_y_dps(void);
-
-/**
- * @brief Get Z-axis rotation rate in degrees per second
- * @return Z-axis angular velocity in °/s
- * @note Range: ±1000°/s, Resolution: ~0.03°/s
- */
-float bmi323_get_gyro_z_dps(void);
 
 //=============================================================================
 // STATUS & INFORMATION GETTERS
@@ -297,45 +238,7 @@ float bmi323_get_gyro_z_dps(void);
  */
 uint8_t bmi323_get_chip_id(void);
 
-/**
- * @brief Get sensor status register value
- * @return 8-bit status register containing various sensor flags
- */
-uint8_t bmi323_get_status(void);
 
-
-/**
- * @brief Check if sensor is properly initialized
- * @return true if sensor was successfully initialized
- */
-bool bmi323_is_initialized(void);
-
-//=============================================================================
-// UTILITY & DEBUG FUNCTIONS
-//=============================================================================
-
-/**
- * @brief Print debug message to Serial
- * 
- * @param message Null-terminated string to print
- * @return None
- * 
- * @note Can be disabled by defining BMI323_NO_DEBUG
- */
-void bmi323_debug_print(const char* message);
-
-/**
- * @brief Print detailed sensor information
- * 
- * Prints comprehensive sensor status including:
- * - Chip ID and I2C address
- * - Initialization status
- * - Current configuration
- * - Last read timestamp
- * 
- * @return None
- */
-void bmi323_print_info(void);
 
 //=============================================================================
 // ERROR CODES & DIAGNOSTICS
@@ -350,18 +253,8 @@ typedef enum {
     BMI323_ERROR_CONFIG         ///< Configuration error
 } bmi323_error_t;
 
-/**
- * @brief Get last error code
- * @return Last error that occurred
- */
-bmi323_error_t bmi323_get_last_error(void);
 
-/**
- * @brief Convert error code to human-readable string
- * @param error Error code to convert
- * @return Pointer to error description string
- */
-const char* bmi323_error_to_string(bmi323_error_t error);
+
 
 #ifdef __cplusplus
 }

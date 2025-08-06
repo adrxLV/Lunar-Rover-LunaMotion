@@ -1,48 +1,14 @@
 #include "SoftPWM.h"
 #include "soft_servo.h"
-#include "car_control.h"
 #include "parser.h"
 #include "analog_inputs.h"
 #include "bmi323.h"
 #include "fsm_rvr.h"
+#include "PlatformOps.h"
 
-#define SAMPLING_TIME 128 // uS
-extern 
-bmi323_data_t sensor_data;  
-extern analog_sense_t Sensor[];
 SoftServo servo;
 
-String serialIn = "";
 
-bool state = false;
-bool sample = false;
-
-// ISR TIMER 1
-ISR(TIMER1_COMPA_vect) {
-  sample = true;    // set flag to perform sampling
-}
-
-void timer1_setup (void){
-  cli(); // desabilita interrupções globais
-
-  TCCR1A = 0; // Modo normal
-  TCCR1B = 0;
-
-  // // Modo CTC
-  // TCCR1B |= (1 << WGM12);
-  // // Prescaler 1024
-  // TCCR1B |= (1 << CS12) | (1 << CS10);
-
-  // 128 ms com clock de 16MHz: OCR1A = (F_CPU / Prescaler) * Tempo - 1
-  // OCR1A = (16.000.000 / 1024) * 0.128 - 1 ≈ 1999
-  //OCR1A = 1999;
-  OCR1A = 15624;
-
-  // Habilita interrupção
-  TIMSK1 |= (1 << OCIE1A);
-
-  sei(); // habilita interrupções globais
-}
 
 void setup() {
   pinMode(8, OUTPUT); 
@@ -58,19 +24,19 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   init_fsm();
 
- // Initialize BMI323 sensor
-    Serial.println("\nInitializing BMI323 sensor...");
+ //Initialize BMI323 sensor
+     Serial.println("\nInitializing BMI323 sensor...");
     if (bmi323_init()) {
         Serial.println("✓ BMI323 sensor initialized successfully!");
         
-        // Print sensor information
+        //Print sensor information
         Serial.print("Chip ID: 0x");
         Serial.println(bmi323_get_chip_id(), HEX);
         Serial.println("I2C Address:0x68");
         
     } else {
         Serial.println("Failed to initialize BMI323 sensor!");        
-        // Halt execution with error indication
+        //Halt execution with error indication
         while (1) {
             digitalWrite(LED_BUILTIN, HIGH);
             delay(100);
