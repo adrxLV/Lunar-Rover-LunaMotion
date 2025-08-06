@@ -1,168 +1,376 @@
-// ===========================================
-// CONFIGURAÇÃO DE VARIÁVEIS DO ROVER
-// ===========================================
+// Variables for rover control
+let v = 0;  // Linear velocidade
+let w = 0;  // Angular velocidade  
+let alpha = 110*3.14/180;  // Angulo da camera
+
+// Gamepad variaveis
 let gamepadActive = false;
 let gamepadIndex = -1;
-let ws = null;
-let wsConnected = false;
-
-// Configurações do gamepad
-const GAMEPAD_DEAD_ZONE = 0.15;
-const TRIGGER_DEAD_ZONE = 0.05;
-const TRIGGER_SENSITIVITY = 0.3; // Fator de sensibilidade dos triggers (0.1 = baixa, 1.0 = alta)
-const MAX_LINEAR_VELOCITY = 0.44; // m/s
-const MAX_ANGULAR_VELOCITY = 2.0; // rad/s
-
-// Estado atual do rover
-let currentLinearVelocity = 0;
-let currentAngularVelocity = 0;
-
-// Atualização
 let lastUpdate = 0;
 const UPDATE_INTERVAL = 60; 
 
-// Log de comandos
-let commandsLog = [];
-const MAX_LOG_ENTRIES = 50;
+// Gamepad configurações
+const GAMEPAD_DEAD_ZONE = 0.15;
+const TRIGGER_DEAD_ZONE = 0.05;
+const TRIGGER_SENSITIVITY = 0.3;
+const CAMERA_SENSITIVITY = 1; 
+const MAX_LINEAR_VELOCITY = 0.44; // m/s
+const MAX_ANGULAR_VELOCITY = 2.0; // rad/s
 
-// Variáveis do stream da câmera
-let streamActive = false;
-let roverIp = '';
-let streamUrl = '';
+// Autonomous mode configurações
+const MAX_AUTONOMOUS_LINEAR_VELOCITY = 0.3; 
+const MAX_AUTONOMOUS_ANGULAR_VELOCITY = 2.0;
+
+// estado atual
+let currentLinearVelocity = 0;
+let currentAngularVelocity = 0;
+
+// nav autonoma state
+let autonomousMode = false;
+let flyByWireMode = false;
+let flyByWireCorrecting = false; 
+let lastSensorData = null;
+let previousXButtonState = false;
+let previousYButtonState = false;
+
+// WebSocket conecção
+let ws = new WebSocket("ws://localhost:8000/ws");
 
 // ===========================================
-// INICIALIZAÇÃO
+// WEBSOCKET SETUP
 // ===========================================
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('[Gamepad Rover] Inicializando sistema de controle...');
+ws.onmessage = function(event) {
+    let messages = document.getElementById('sensors-data')
+    let data = JSON.parse(event.data);
+    console.log(data);
+
     
-    // Iniciar WebSocket
-    initializeWebSocket();
-    
-    // Iniciar controle do gamepad
-    initializeGamepadControl();
-    
-    // Iniciar data/hora
-    updateDateTime();
-    setInterval(updateDateTime, 1000);
-    
-    // Configurar botões
-    setupEventListeners();
-    
-    // Iniciar stream da câmera automaticamente
+    lastSensorData = data;
+
+    let formattedJson = JSON.stringify(data, null, 2);
+    messages.value = formattedJson;
+};
+
+ws.onopen = function() {
+    console.log('WebSocket connected');
+};
+
+ws.onclose = function() {
+    console.log('WebSocket disconnected');
     setTimeout(() => {
-        startCameraStream('lunar-rover-0.eec');
-    }, 1000); // Aguardar 1 segundo para garantir que a página carregou completamente
-    
-    console.log('[Gamepad Rover] Sistema inicializado');
-});
+        ws = new WebSocket("ws://localhost:8000/ws");
+        setupWebSocketHandlers();
+    }, 3000);
+};
+
+function setupWebSocketHandlers() {
+    ws.onmessage = function(event) {
+        let messages = document.getElementById('sensors-data')
+        let data = JSON.parse(event.data);
+        console.log(data);
+
+        lastSensorData = data;
+
+        let formattedJson = JSON.stringify(data, null, 2);
+        messages.value = formattedJson;
+    };
+}
 
 // ===========================================
-// WEBSOCKET
+// AUTONOMOUS NAVIGATION FUNCTIONS
 // ===========================================
-function initializeWebSocket() {
-    try {
-        ws = new WebSocket("ws://localhost:8000/ws");
-        
-        ws.onopen = function() {
-            console.log('[WebSocket] Conectado ao servidor');
-            wsConnected = true;
-            updateWSStatus(true);
-        };
-        
-        ws.onmessage = function(event) {
-            try {
-                let data = JSON.parse(event.data);
-                console.log('[WebSocket] Dados recebidos:', data);
-                updateSensorData(data);
-            } catch (error) {
-                console.error('[WebSocket] Erro ao processar dados:', error);
-            }
-        };
-        
-        ws.onclose = function() {
-            console.log('[WebSocket] Conexão fechada');
-            wsConnected = false;
-            updateWSStatus(false);
-            
-            // Tentar reconectar após 3 segundos
-            setTimeout(() => {
-                console.log('[WebSocket] Tentando reconectar...');
-                initializeWebSocket();
-            }, 3000);
-        };
-        
-        ws.onerror = function(error) {
-            console.error('[WebSocket] Erro:', error);
-            wsConnected = false;
-            updateWSStatus(false);
-        };
-        
-    } catch (error) {
-        console.error('[WebSocket] Erro ao inicializar:', error);
-        updateWSStatus(false);
+function calculateAutonomousNavigation() {
+    if (!lastSensorData || !lastSensorData.ir || !lastSensorData.gyro || !lastSensorData.acc) {
+        console.log('No sensor data available for autonomous navigation');
+        return { v: 0, w: 0 };
+    }
+
+    const m_ir = lastSensorData.ir;
+    const m_gyro = lastSensorData.gyro;
+    const m_acc = lastSensorData.acc;
+
+    let v_auto = 0;
+    let w_auto = 0;
+
+    if (m_ir[0] < 0.2 || m_ir[1] < 0.2 || m_ir[2] < 0.2) {
+        v_auto = 0;
+        if (m_ir[2] > m_ir[0]) {
+            w_auto = MAX_AUTONOMOUS_ANGULAR_VELOCITY;
+            v_auto = -MAX_AUTONOMOUS_LINEAR_VELOCITY;
+        } else {
+            w_auto = -MAX_AUTONOMOUS_ANGULAR_VELOCITY;
+            v_auto = -MAX_AUTONOMOUS_LINEAR_VELOCITY;
+        }
+        console.log(`Obstacle detected - IR: [${m_ir.join(', ')}] - Turning: v=${v_auto}, w=${w_auto}`);
+    } else {
+        v_auto = MAX_AUTONOMOUS_LINEAR_VELOCITY;
+        w_auto = 0;
+        console.log(`Clear path - IR: [${m_ir.join(', ')}] - Moving forward: v=${v_auto}, w=${w_auto}`);
+    }
+
+    return { v: v_auto, w: w_auto };
+}
+
+function toggleAutonomousMode() {
+    autonomousMode = !autonomousMode;
+    console.log('Autonomous mode:', autonomousMode ? 'ENABLED' : 'DISABLED');
+    
+    updateAutonomousModeDisplay();
+    
+    if (!autonomousMode) {
+        currentLinearVelocity = 0;
+        currentAngularVelocity = 0;
+        sendGamepadCommand(0, 0);
+        updateSliderDisplays(0, 0);
+    } else {
+        startAutonomousNavigation();
     }
 }
 
-function sendCommand(v, w) {
-    if (ws && wsConnected) {
-        const cmd = {
-            "v": Number(v.toFixed(3)),
-            "w": Number(w.toFixed(3))
-        };
+function startAutonomousNavigation() {
+    function autonomousLoop() {
+        if (!autonomousMode) return;
         
-        try {
-            ws.send(JSON.stringify(cmd));
-            logCommand(cmd);
-        } catch (error) {
-            console.error('[WebSocket] Erro ao enviar comando:', error);
+        const autoNav = calculateAutonomousNavigation();
+        
+        currentLinearVelocity = autoNav.v;
+        currentAngularVelocity = autoNav.w;
+        
+        v = autoNav.v;
+        w = autoNav.w;
+        
+        sendGamepadCommand(autoNav.v, autoNav.w);
+        updateSliderDisplays(autoNav.v, autoNav.w);
+        
+        setTimeout(autonomousLoop, 60);
+    }
+    
+    autonomousLoop();
+}
+
+function updateAutonomousModeDisplay() {
+    const statusElement = document.getElementById('autonomous-status');
+    if (statusElement) {
+        if (autonomousMode) {
+            statusElement.textContent = 'AUTONOMOUS MODE: ON';
+            statusElement.style.color = 'green';
+        } else if (flyByWireMode) {
+            if (flyByWireCorrecting) {
+                statusElement.textContent = 'FLY-BY-WIRE: CORRECTING (AUTO)';
+                statusElement.style.color = 'red';
+            } else {
+                statusElement.textContent = 'FLY-BY-WIRE: MANUAL CONTROL';
+                statusElement.style.color = 'orange';
+            }
+        } else {
+            statusElement.textContent = 'MANUAL MODE: ON';
+            statusElement.style.color = 'blue';
+        }
+    }
+}
+
+function toggleFlyByWireMode() {
+    flyByWireMode = !flyByWireMode;
+    console.log('Fly-by-wire mode:', flyByWireMode ? 'ENABLED' : 'DISABLED');
+    
+    if (flyByWireMode) {
+        autonomousMode = false;
+        startFlyByWireLoop();
+    } else {
+        flyByWireCorrecting = false;
+    }
+    
+    updateAutonomousModeDisplay();
+    
+    if (!flyByWireMode) {
+        currentLinearVelocity = 0;
+        currentAngularVelocity = 0;
+        sendGamepadCommand(0, 0);
+        updateSliderDisplays(0, 0);
+    }
+}
+
+function startFlyByWireLoop() {
+    function flyByWireLoop() {
+        if (!flyByWireMode) return;
+        
+        if (lastSensorData && lastSensorData.ir) {
+            const m_ir = lastSensorData.ir;
+            const obstacleDetected = m_ir[0] < 0.2 || m_ir[1] < 0.2 || m_ir[2] < 0.2;
+            
+            if (obstacleDetected && !flyByWireCorrecting) {
+                flyByWireCorrecting = true;
+                updateAutonomousModeDisplay();
+                console.log('Fly-by-wire taking control for obstacle avoidance');
+            } else if (!obstacleDetected && flyByWireCorrecting) {
+                flyByWireCorrecting = false;
+                updateAutonomousModeDisplay();
+                console.log('Fly-by-wire returning control to pilot');
+            }
+            
+            if (flyByWireCorrecting) {
+                const correction = calculateSafetyOverride(0, 0); 
+                
+                currentLinearVelocity = correction.v;
+                currentAngularVelocity = correction.w;
+                v = correction.v;
+                w = correction.w;
+                
+                sendGamepadCommand(correction.v, correction.w);
+                updateSliderDisplays(correction.v, correction.w);
+            }
+        }
+        
+        setTimeout(flyByWireLoop, 60);
+    }
+    
+    flyByWireLoop();
+}
+
+function calculateSafetyOverride(manualV, manualW) {
+    if (!lastSensorData || !lastSensorData.ir) {
+        flyByWireCorrecting = false;
+        return { v: manualV, w: manualW };
+    }
+
+    const m_ir = lastSensorData.ir;
+    
+    const obstacleDetected = m_ir[0] < 0.2 || m_ir[1] < 0.2 || m_ir[2] < 0.2;
+    
+    if (obstacleDetected) {
+        flyByWireCorrecting = true;
+        console.log(`Fly-by-wire correction active - IR: [${m_ir.join(', ')}] - Manual input ignored`);
+        
+        let v_correct = 0;
+        let w_correct = 0;
+        
+        if (m_ir[2] > m_ir[0]) {
+            w_correct = MAX_AUTONOMOUS_ANGULAR_VELOCITY;
+            v_correct = -MAX_AUTONOMOUS_LINEAR_VELOCITY;
+        } else {
+            w_correct = -MAX_AUTONOMOUS_ANGULAR_VELOCITY;
+            v_correct = -MAX_AUTONOMOUS_LINEAR_VELOCITY;
+        }
+        
+        return { v: v_correct, w: w_correct };
+    } else {
+        if (flyByWireCorrecting) {
+            console.log('Fly-by-wire correction complete - Returning control to pilot');
+            flyByWireCorrecting = false;
+        }
+        return { v: manualV, w: manualW };
+    }
+}
+
+// ===========================================
+// COMMAND FUNCTIONS
+// ===========================================
+function emit_motor_command() {
+    const cmd = {
+        "v": v,
+        "w": w
+    };
+    if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(cmd));
+    }
+}
+
+function emit_tilt_command() {
+    const cmd = { alpha };
+    if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(cmd));
+    }
+}
+
+function sendGamepadCommand(linearVel, angularVel) {
+    const cmd = {
+        "v": Number(linearVel.toFixed(3)),
+        "w": Number(angularVel.toFixed(3))
+    };
+    if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(cmd));
+    }
+}
+
+// ===========================================
+// SLIDER CONTROLS SETUP
+// ===========================================
+function setupSliders() {
+    const v_slider = document.getElementById('v_slider');
+    const v_valueDisplay = document.getElementById('v_value');
+
+    v_valueDisplay.textContent = Number(v_slider.value).toFixed(2);
+
+    v_slider.oninput = function() {
+        if (!gamepadActive) {
+            v = Number(this.value);
+            v_valueDisplay.textContent = v.toFixed(2);
+            emit_motor_command();
+        }
+    }
+
+    const w_slider = document.getElementById('w_slider');
+    const w_valueDisplay = document.getElementById('w_value');
+
+    w_valueDisplay.textContent = Number(w_slider.value).toFixed(2);
+
+    w_slider.oninput = function() {
+        if (!gamepadActive) {
+            w = Number(this.value);
+            w_valueDisplay.textContent = w.toFixed(2);
+            emit_motor_command();
+        }
+    }
+
+    const a_slider = document.getElementById('a_slider');
+    const a_valueDisplay = document.getElementById('a_value');
+
+    a_valueDisplay.textContent = Number(a_slider.value).toFixed(2);
+
+    a_slider.oninput = function() {
+        if (!gamepadActive) {
+            alpha = Number(this.value)*3.14/180;
+            a_valueDisplay.textContent = (alpha*180/3.14).toFixed(2);
+            emit_tilt_command();
         }
     }
 }
 
 // ===========================================
-// SISTEMA DE GAMEPAD
+// GAMEPAD SYSTEM
 // ===========================================
 function initializeGamepadControl() {
     if (!navigator.getGamepads) {
-        console.warn('[Gamepad] API não suportada neste navegador');
-        updateGamepadStatus(false, 'API não suportada');
+        console.warn('Gamepad API not supported in this browser');
         return;
     }
-    
+
     window.addEventListener('gamepadconnected', function(e) {
-        console.log(`[Gamepad] Conectado: ${e.gamepad.id}`);
+        console.log('Gamepad connected:', e.gamepad.id);
         gamepadIndex = e.gamepad.index;
         gamepadActive = true;
-        updateGamepadStatus(true, e.gamepad.id);
         startGamepadLoop();
     });
-    
+
     window.addEventListener('gamepaddisconnected', function(e) {
-        console.log(`[Gamepad] Desconectado: ${e.gamepad.id}`);
-        if (e.gamepad.index === gamepadIndex) {
-            gamepadIndex = -1;
-            gamepadActive = false;
-            updateGamepadStatus(false, 'Desconectado');
-            sendCommand(0, 0);
-            updateVelocityDisplays(0, 0);
-        }
+        console.log('Gamepad disconnected');
+        gamepadActive = false;
+        gamepadIndex = -1;
+        
+        currentLinearVelocity = 0;
+        currentAngularVelocity = 0;
+        updateSliderDisplays(0, 0);
+        sendGamepadCommand(0, 0);
     });
-    
+
     const gamepads = navigator.getGamepads();
     for (let i = 0; i < gamepads.length; i++) {
         if (gamepads[i]) {
-            console.log(`[Gamepad] Detectado: ${gamepads[i].id}`);
             gamepadIndex = i;
             gamepadActive = true;
-            updateGamepadStatus(true, gamepads[i].id);
             startGamepadLoop();
             break;
         }
-    }
-    
-    if (gamepadIndex === -1) {
-        updateGamepadStatus(false, 'Nenhum gamepad detectado');
     }
 }
 
@@ -174,7 +382,6 @@ function startGamepadLoop() {
         if (!gamepad) {
             gamepadIndex = -1;
             gamepadActive = false;
-            updateGamepadStatus(false, 'Gamepad perdido');
             return;
         }
         
@@ -193,7 +400,39 @@ function startGamepadLoop() {
 }
 
 function processGamepadInputs(gamepad) {
+    const xButton = gamepad.buttons[2];
+    const currentXButtonState = xButton && xButton.pressed;
+    
+    const yButton = gamepad.buttons[3];
+    const currentYButtonState = yButton && yButton.pressed;
+    
+    if (currentXButtonState && !previousXButtonState) {
+        if (!autonomousMode) {
+            flyByWireMode = false;
+        }
+        toggleAutonomousMode();
+    }
+
+    if (currentYButtonState && !previousYButtonState) {
+        if (!flyByWireMode) {
+            autonomousMode = false;
+        }
+        toggleFlyByWireMode();
+    }
+    
+    previousXButtonState = currentXButtonState;
+    previousYButtonState = currentYButtonState;
+
+    if (autonomousMode) {
+        return;
+    }
+    
+    if (flyByWireMode && flyByWireCorrecting) {
+        return;
+    }
+
     const leftStickX = gamepad.axes[0] || 0;
+    const rightStickY = gamepad.axes[3] || 0; 
     
     let leftTrigger = 0;
     let rightTrigger = 0;
@@ -205,6 +444,7 @@ function processGamepadInputs(gamepad) {
     if (rightTrigger === 0 && gamepad.buttons[7]) rightTrigger = gamepad.buttons[7].value;
     
     const processedStickX = Math.abs(leftStickX) > GAMEPAD_DEAD_ZONE ? leftStickX : 0;
+    const processedRightStickY = Math.abs(rightStickY) > GAMEPAD_DEAD_ZONE ? rightStickY : 0;
     const processedLeftTrigger = leftTrigger > TRIGGER_DEAD_ZONE ? leftTrigger : 0;
     const processedRightTrigger = rightTrigger > TRIGGER_DEAD_ZONE ? rightTrigger : 0;
     
@@ -225,263 +465,97 @@ function processGamepadInputs(gamepad) {
     
     const angularVelocity = -processedStickX * MAX_ANGULAR_VELOCITY;
     
-    // Reduzir velocidade linear baseada na velocidade angular
-    // Quanto maior a velocidade angular, menor a velocidade linear (mínimo 50%)
-    if (linearVelocity !== 0 && Math.abs(angularVelocity) > 0) {
-        const angularFactor = Math.abs(angularVelocity) / MAX_ANGULAR_VELOCITY; // 0 a 1
-        const reductionFactor = 1 - (angularFactor * 0.5); // 1 a 0.5 (50% redução máxima)
-        linearVelocity *= reductionFactor;
-    } 
+    if (Math.abs(processedRightStickY) > 0) {
+        const sensitizedStickY = processedRightStickY * CAMERA_SENSITIVITY;
+        
+        const minAngle = 15;
+        const maxAngle = 110;
+        const stickValue = sensitizedStickY; 
+        const normalizedValue = (stickValue + CAMERA_SENSITIVITY) / (2 * CAMERA_SENSITIVITY);
+        const clampedValue = Math.max(0, Math.min(1, normalizedValue)); 
+        const newAngleDeg = minAngle + clampedValue * (maxAngle - minAngle);
+        
+        alpha = newAngleDeg * 3.14 / 180;
+        
+        const a_valueDisplay = document.getElementById('a_value');
+        const a_slider = document.getElementById('a_slider');
+        if (a_valueDisplay) a_valueDisplay.textContent = newAngleDeg.toFixed(2);
+        if (a_slider) {
+            a_slider.value = newAngleDeg;
+           
+            a_slider.dispatchEvent(new Event('input'));
+        }
+        
+        if (typeof window.updateDialsFromExternal === 'function') {
+            window.updateDialsFromExternal(undefined, undefined, newAngleDeg);
+        }
+        
+        emit_tilt_command();
+    }
     
-    const linearDiff = Math.abs(linearVelocity - currentLinearVelocity);
-    const angularDiff = Math.abs(angularVelocity - currentAngularVelocity);
+  
+    if (linearVelocity !== 0 && Math.abs(angularVelocity) > 0) {
+        const angularFactor = Math.abs(angularVelocity) / MAX_ANGULAR_VELOCITY;
+        const reductionFactor = 1 - (angularFactor * 0.5); 
+        linearVelocity *= reductionFactor;
+    }
+    
+    let finalVelocities = { v: linearVelocity, w: angularVelocity };
+    
+    const linearDiff = Math.abs(finalVelocities.v - currentLinearVelocity);
+    const angularDiff = Math.abs(finalVelocities.w - currentAngularVelocity);
     
     if (linearDiff > 0.01 || angularDiff > 0.01) {
-        currentLinearVelocity = linearVelocity;
-        currentAngularVelocity = angularVelocity;
+        currentLinearVelocity = finalVelocities.v;
+        currentAngularVelocity = finalVelocities.w;
         
-        sendCommand(linearVelocity, angularVelocity);
+        v = finalVelocities.v;
+        w = finalVelocities.w;
         
-        updateVelocityDisplays(linearVelocity, angularVelocity);
+        sendGamepadCommand(finalVelocities.v, finalVelocities.w);
+        updateSliderDisplays(finalVelocities.v, finalVelocities.w);
     }
 }
 
 // ===========================================
-// INTERFACE DO UTILIZADOR
+// DISPLAY UPDATE FUNCTIONS
 // ===========================================
-function updateGamepadStatus(connected, info = '') {
-    const indicator = document.getElementById('gamepad-indicator');
-    const dot = document.getElementById('gamepad-dot');
-    const text = document.getElementById('gamepad-status-text');
+function updateSliderDisplays(linearVel, angularVel) {
+    const v_valueDisplay = document.getElementById('v_value');
+    const w_valueDisplay = document.getElementById('w_value');
+    const v_slider = document.getElementById('v_slider');
+    const w_slider = document.getElementById('w_slider');
     
-    if (connected) {
-        dot.className = 'status-dot connected';
-        text.textContent = `Connected: ${info}`;
-        indicator.className = 'status-indicator connected';
-    } else {
-        dot.className = 'status-dot disconnected';
-        text.textContent = info || 'Disconnected';
-        indicator.className = 'status-indicator disconnected';
+    if (v_valueDisplay) v_valueDisplay.textContent = linearVel.toFixed(2);
+    if (w_valueDisplay) w_valueDisplay.textContent = angularVel.toFixed(2);
+    
+    if (v_slider) {
+        v_slider.value = linearVel;
+        v_slider.dispatchEvent(new Event('input'));
+    }
+    if (w_slider) {
+        w_slider.value = angularVel;
+        w_slider.dispatchEvent(new Event('input'));
+    }
+    
+    if (typeof window.updateDialsFromExternal === 'function') {
+        window.updateDialsFromExternal(linearVel, angularVel);
     }
 }
 
-function updateWSStatus(connected) {
-    const dot = document.getElementById('ws-dot');
-    const text = document.getElementById('ws-status-text');
-    const status = document.getElementById('ws-status');
-    
-    if (connected) {
-        dot.className = 'status-dot connected';
-        text.textContent = 'Connected';
-        status.className = 'connection-status connected';
-    } else {
-        dot.className = 'status-dot disconnected';
-        text.textContent = 'Disconnected';
-        status.className = 'connection-status disconnected';
-    }
-}
-
-function updateVelocityDisplays(linear, angular) {
-    const linearDisplay = document.getElementById('linear-velocity-display');
-    const angularDisplay = document.getElementById('angular-velocity-display');
-    
-    linearDisplay.textContent = `${linear.toFixed(2)} m/s`;
-    angularDisplay.textContent = `${angular.toFixed(2)} rad/s`;
-}
-
-function updateSensorData(data) {
-    const sensorTextarea = document.getElementById('sensors-data');
-    const formattedJson = JSON.stringify(data, null, 2);
-    sensorTextarea.value = formattedJson;
-}
-
-function updateDateTime() {
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-    }).replace(/\//g, ' / ');
-    
-    const timeStr = now.toLocaleTimeString('en-GB', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-    });
-    
-    const datetimeElement = document.getElementById('current-datetime');
-    datetimeElement.textContent = `DATE: ${dateStr} | ${timeStr} GMT+0`;
-}
-
-function logCommand(cmd) {
-    const timestamp = new Date().toLocaleTimeString();
-    const logEntry = {
-        time: timestamp,
-        command: cmd
-    };
-    
-    commandsLog.unshift(logEntry);
-    if (commandsLog.length > MAX_LOG_ENTRIES) {
-        commandsLog.pop();
-    }
-    
-    updateCommandsLog();
-}
-
-function updateCommandsLog() {
-    const logContainer = document.getElementById('commands-log');
-    logContainer.innerHTML = '';
-    
-    commandsLog.forEach(entry => {
-        const logItem = document.createElement('div');
-        logItem.className = 'log-item';
-        logItem.innerHTML = `
-            <span class="log-time">[${entry.time}]</span>
-            <span class="log-command">v: ${entry.command.v}, w: ${entry.command.w}</span>
-        `;
-        logContainer.appendChild(logItem);
-    });
-}
-
-function setupEventListeners() {
-    // Botão de limpar log
-    const clearLogBtn = document.getElementById('clear-log-btn');
-    clearLogBtn.addEventListener('click', function() {
-        commandsLog = [];
-        updateCommandsLog();
-    });
-    
-    // Botão de parar stream da câmera
-    const stopStreamBtn = document.getElementById('stop-stream-btn');
-    stopStreamBtn.addEventListener('click', function() {
-        stopCameraStream();
-    });
-}
-
 // ===========================================
-// CONTROLE DO STREAM DA CÂMERA
+// INITIALIZATION
 // ===========================================
-function startCameraStream(ip) {
-    console.log(`[Camera] Iniciando stream da câmera para IP: ${ip}`);
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Rover control system initializing...');
     
-    const video = document.getElementById('rover-stream');
-    const overlay = document.getElementById('stream-overlay');
-    const statusText = document.getElementById('stream-status-text');
-    const stopBtn = document.getElementById('stop-stream-btn');
+    setupSliders();
     
-    // Validar IP/domínio
-    if (!ip) {
-        console.error('[Camera] IP/domínio não fornecido');
-        updateStreamStatus('Erro: IP/domínio inválido');
-        return;
-    }
+    initializeGamepadControl();
     
-    roverIp = ip;
-    streamUrl = `rtsp://${ip}:8554/stream`;
+    updateAutonomousModeDisplay();
     
-    // Atualizar status
-    updateStreamStatus('Conectando...');
-    
-    try {
-        // Para streams RTSP em navegadores, precisamos usar uma solução alternativa
-        // Como o navegador não suporta RTSP nativamente, vamos tentar usar HLS ou WebRTC
-        
-        // Primeiro, tentar conectar via WebSocket para converter RTSP em WebRTC
-        const wsStreamUrl = `ws://${ip}:8080/stream`; // Assumindo que há um servidor WebSocket para conversão
-        
-        // Como alternativa, vamos criar um proxy HTTP para o stream
-        const httpStreamUrl = `http://${ip}:8080/stream.m3u8`; // Stream HLS
-        
-        // Tentar configurar o stream
-        video.src = httpStreamUrl;
-        video.load();
-        
-        video.onloadstart = function() {
-            console.log('[Camera] Carregando stream...');
-            updateStreamStatus('Carregando stream...');
-        };
-        
-        video.onloadeddata = function() {
-            console.log('[Camera] Stream carregado com sucesso');
-            streamActive = true;
-            overlay.classList.add('hidden');
-            stopBtn.disabled = false;
-            updateStreamStatus('Stream ativo');
-        };
-        
-        video.onerror = function(e) {
-            console.error('[Camera] Erro ao carregar stream:', e);
-            streamActive = false;
-            overlay.classList.remove('hidden');
-            stopBtn.disabled = true;
-            updateStreamStatus('Erro: Não foi possível conectar ao stream. Verifique se o rover está ligado e acessível.');
-            
-            // Tentar método alternativo - usar mjpeg
-            console.log('[Camera] Tentando MJPEG stream...');
-            const mjpegUrl = `http://${ip}:8080/stream.mjpg`;
-            video.src = mjpegUrl;
-        };
-        
-        video.onplay = function() {
-            console.log('[Camera] Stream reproduzindo');
-        };
-        
-    } catch (error) {
-        console.error('[Camera] Erro ao inicializar stream:', error);
-        streamActive = false;
-        overlay.classList.remove('hidden');
-        stopBtn.disabled = true;
-        updateStreamStatus('Erro: Falha ao inicializar stream');
-    }
-}
-
-function stopCameraStream() {
-    console.log('[Camera] Parando stream da câmera');
-    
-    const video = document.getElementById('rover-stream');
-    const overlay = document.getElementById('stream-overlay');
-    const stopBtn = document.getElementById('stop-stream-btn');
-    
-    // Parar o vídeo
-    video.pause();
-    video.src = '';
-    video.load();
-    
-    // Resetar estado
-    streamActive = false;
-    overlay.classList.remove('hidden');
-    stopBtn.disabled = true;
-    
-    updateStreamStatus('Stream parado');
-    
-    console.log('[Camera] Stream parado com sucesso');
-}
-
-function updateStreamStatus(message) {
-    const statusText = document.getElementById('stream-status-text');
-    if (statusText) {
-        statusText.textContent = message;
-    }
-    console.log(`[Camera Status] ${message}`);
-}
-
-// ===========================================
-// ERROS
-// ===========================================
-window.addEventListener('error', function(event) {
-    console.error('[System Error]', event.error);
-});
-
-window.addEventListener('unhandledrejection', function(event) {
-    console.error('[Unhandled Promise Rejection]', event.reason);
-});
-
-// ===========================================
-// PARAR ANTES DE FECHAR A PAG
-// ===========================================
-window.addEventListener('beforeunload', function() {
-    if (ws && wsConnected) {
-        sendCommand(0, 0);
-        ws.close();
-    }
+    console.log('Rover control system initialized');
+    console.log('Press X button on gamepad to toggle autonomous navigation');
+    console.log('Press Y button on gamepad to toggle fly-by-wire mode (manual + obstacle avoidance)');
 });

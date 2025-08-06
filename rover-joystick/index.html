@@ -1,117 +1,328 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Luna Motion Control Center - Gamepad Rover</title>
-  <link rel="stylesheet" href="style.css">
+  <title>Lunar Rover Control Station</title>
+  <link rel="icon" type="image/png" href="lunamotion icon transparent (2).png">
+  <link rel="stylesheet" href="styles.css">
 </head>
-
 <body>
-  <div class="main-dashboard-container">
-    
-    <!-- Left Side Panel -->
-    <div class="side-panel left-panel">
-      <div class="logo-section">
-        <img src="FULLTRANSPARENT Branco.png" alt="Rover Logo" class="logo">
-      </div>
-      <div class="datetime-section">
-        <span class="datetime-text" id="current-datetime">DATE: -- / -- / ---- | --:-- GMT+0</span>
-      </div>
+  <div class="container">
+    <div class="header">
+      <img src="lunamotion icon transparent (2).png" alt="LunaMotion Team Logo" class="team-logo">
+      <h1>LUNAMOTION</h1>
+      <div class="subtitle">Control Dashboard</div>
     </div>
 
-    <!-- Main Center Panel -->
-    <div class="center-panel">
-      <h1 class="main-title">Gamepad Rover Control Center</h1>
-      
-      <!-- Gamepad Status Section -->
-      <div class="gamepad-status-section">
-        <div class="status-header">
-          <span class="status-title">Xbox Gamepad Status</span>
-          <div class="status-indicator" id="gamepad-indicator">
-            <div class="status-dot" id="gamepad-dot"></div>
-            <span id="gamepad-status-text">Disconnected</span>
+    <div class="control-grid">
+      <!-- Linear Velocity Control -->
+      <div class="control-panel">
+        <div class="control-title">Linear Velocity</div>
+        <div class="control-value" id="v_value">0.00</div>
+        <div class="control-unit">m/s</div>
+        <div class="dial-container" id="v_dial">
+          <div class="dial">
+            <div class="dial-marks"></div>
+            <div class="dial-pointer" id="v_pointer"></div>
+            <div class="dial-center"></div>
           </div>
         </div>
+        <input type="range" id="v_slider" min="-0.44" max="0.44" step="0.01" value="0" style="display: none;">
       </div>
 
-      <!-- Camera Stream Section -->
-      <div class="camera-stream-section">
-        <div class="camera-header">
-          <span class="camera-title">Rover Camera Stream</span>
-          <div class="camera-controls">
-            <button class="stream-btn stop" id="stop-stream-btn">Stop Stream</button>
+      <!-- Angular Velocity Control -->
+      <div class="control-panel">
+        <div class="control-title">Angular Velocity</div>
+        <div class="control-value" id="w_value">0.0</div>
+        <div class="control-unit">rad/s</div>
+        <div class="dial-container" id="w_dial">
+          <div class="dial">
+            <div class="dial-marks"></div>
+            <div class="dial-pointer" id="w_pointer"></div>
+            <div class="dial-center"></div>
           </div>
         </div>
-        <div class="video-container">
-          <video id="rover-stream" autoplay muted playsinline class="rover-video">
-            <p>Your browser does not support the video element or WebRTC.</p>
-          </video>
-          <div class="stream-overlay" id="stream-overlay">
-            <div class="stream-status">
-              <div class="stream-icon">📹</div>
-              <span id="stream-status-text">Connecting to rover camera...</span>
-            </div>
-          </div>
-        </div>
+        <input type="range" id="w_slider" min="-2.0" max="2.0" step="0.1" value="0" style="display: none;">
       </div>
 
-      <!-- Control Information -->
-      <div class="control-info-section">
-        <div class="control-info-grid">
-          <div class="control-item">
-            <img src="../ASSETS/SpeedIcon.svg" alt="Speed" class="control-icon">
-            <div class="control-details">
-              <span class="control-label">Linear Velocity</span>
-              <span class="control-description">R/L Triggers</span>
-              <span class="control-value" id="linear-velocity-display">0.00 m/s</span>
-            </div>
-          </div>
-          <div class="control-item">
-            <img src="../ASSETS/CompassIcon.svg" alt="Angle" class="control-icon">
-            <div class="control-details">
-              <span class="control-label">Angular Velocity</span>
-              <span class="control-description">Left Joystick X</span>
-              <span class="control-value" id="angular-velocity-display">0.00 rad/s</span>
-            </div>
+      <!-- Camera Tilt Control -->
+      <div class="control-panel">
+        <div class="control-title">Camera Tilt</div>
+        <div class="control-value" id="a_value">110</div>
+        <div class="control-unit">degrees</div>
+        <div class="dial-container" id="a_dial">
+          <div class="dial">
+            <div class="dial-marks"></div>
+            <div class="dial-pointer" id="a_pointer"></div>
+            <div class="dial-center"></div>
           </div>
         </div>
+        <input type="range" id="a_slider" min="15" max="110" step="1" value="110" style="display: none;">
       </div>
 
-      <!-- Control Commands Log -->
-      <div class="commands-log-section">
-        <div class="log-header">
-          <span class="log-title">Commands Log</span>
-          <button class="clear-log-btn" id="clear-log-btn">Clear</button>
+      <!-- Status Panel -->
+      <div class="status-panel">
+        <div class="status-indicator">
+          <div class="status-light manual" id="status-light"></div>
+          <span id="autonomous-status">MANUAL MODE: ACTIVE</span>
         </div>
-        <div class="log-container">
-          <div id="commands-log"></div>
+        <div class="instructions">
+          Press <strong>X</strong> button for autonomous navigation<br>
+          Press <strong>Y</strong> button for fly-by-wire mode (manual control with obstacle avoidance)
         </div>
       </div>
     </div>
 
-    <!-- Right Side Panel -->
-    <div class="side-panel right-panel">
-      <div class="side-controls">
-        <!-- Sensor Data Section -->
-        <div class="sensor-data-section">
-          <div class="sensor-header">
-            <span class="sensor-title">Real-time Sensor Data</span>
-            <div class="connection-status" id="ws-status">
-              <div class="status-dot" id="ws-dot"></div>
-              <span id="ws-status-text">Disconnected</span>
-            </div>
-          </div>
-          <div class="sensor-data-container">
-            <textarea id="sensors-data" readonly placeholder="Waiting for sensor data..."></textarea>
-          </div>
-        </div>
-      </div>
+    <div class="sensors-panel">
+      <div class="sensors-title">📡 Sensor Data Stream</div>
+      <textarea id="sensors-data" placeholder="Waiting for sensor data..."></textarea>
     </div>
   </div>
 
+  <script>
+    // Initialize dial controls
+    function initializeDials() {
+      // Create dial marks
+      document.querySelectorAll('.dial-marks').forEach(marksContainer => {
+        for (let i = 0; i < 12; i++) {
+          const mark = document.createElement('div');
+          mark.className = 'dial-mark';
+          mark.style.transform = `translateX(-50%) rotate(${i * 30}deg)`;
+          marksContainer.appendChild(mark);
+        }
+      });
+
+      // Linear velocity dial
+      setupDial('v', -0.44, 0.44, 0.01);
+      // Angular velocity dial
+      setupDial('w', -3.5, 3.5, 0.2);
+      // Camera angle dial
+      setupDial('a', 15, 110, 1);
+    }
+
+    function setupDial(prefix, min, max, step) {
+      const dial = document.getElementById(`${prefix}_dial`);
+      const pointer = document.getElementById(`${prefix}_pointer`);
+      const valueDisplay = document.getElementById(`${prefix}_value`);
+      const slider = document.getElementById(`${prefix}_slider`);
+      
+      let isDragging = false;
+
+      function updateDial(value) {
+        const percentage = (value - min) / (max - min);
+        const angle = (percentage * 270) - 135; // -135 to +135 degrees
+        pointer.style.transform = `translate(-50%, -100%) rotate(${angle}deg)`;
+        
+        if (prefix === 'v') {
+          valueDisplay.textContent = parseFloat(value).toFixed(2);
+        } else if (prefix === 'w') {
+          valueDisplay.textContent = parseFloat(value).toFixed(1);
+        } else {
+          valueDisplay.textContent = Math.round(value);
+        }
+        
+        slider.value = value;
+        
+        // Trigger change event for gamepad script
+        slider.dispatchEvent(new Event('input'));
+      }
+
+      function getValueFromAngle(clientX, clientY) {
+        const rect = dial.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        
+        let angle = Math.atan2(clientY - centerY, clientX - centerX);
+        angle = (angle * 180 / Math.PI) + 90; // Convert to degrees and adjust
+        
+        if (angle < 0) angle += 360;
+        if (angle < 45) angle += 360;
+        
+        // Map angle to value range (45 to 315 degrees = min to max)
+        angle = Math.max(45, Math.min(315, angle));
+        const percentage = (angle - 45) / 270;
+        let value = min + (percentage * (max - min));
+        
+        // Round to step
+        value = Math.round(value / step) * step;
+        value = Math.max(min, Math.min(max, value));
+        
+        return value;
+      }
+
+      dial.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        const value = getValueFromAngle(e.clientX, e.clientY);
+        updateDial(value);
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (isDragging && e.target.closest(`#${prefix}_dial`)) {
+          const value = getValueFromAngle(e.clientX, e.clientY);
+          updateDial(value);
+        }
+      });
+
+      document.addEventListener('mouseup', () => {
+        isDragging = false;
+      });
+
+      // Touch events for mobile
+      dial.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        isDragging = true;
+        const touch = e.touches[0];
+        const value = getValueFromAngle(touch.clientX, touch.clientY);
+        updateDial(value);
+      });
+
+      document.addEventListener('touchmove', (e) => {
+        if (isDragging && e.target.closest(`#${prefix}_dial`)) {
+          e.preventDefault();
+          const touch = e.touches[0];
+          const value = getValueFromAngle(touch.clientX, touch.clientY);
+          updateDial(value);
+        }
+      });
+
+      document.addEventListener('touchend', () => {
+        isDragging = false;
+      });
+
+      // Initialize position
+      updateDial(slider.value);
+      
+      // Listen for programmatic changes to the slider
+      const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+          if (mutation.type === 'attributes' && mutation.attributeName === 'value') {
+            updateDial(slider.value);
+          }
+        });
+      });
+      
+      observer.observe(slider, { attributes: true });
+      
+      // Also listen for input events that might be triggered programmatically
+      slider.addEventListener('input', function() {
+        updateDial(this.value);
+      });
+    }
+
+    // Initialize when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeDials();
+        
+        // Periodic sync to ensure dials stay updated with any changes
+        setInterval(function() {
+            // Get current slider values and sync dials
+            const vSlider = document.getElementById('v_slider');
+            const wSlider = document.getElementById('w_slider');
+            const aSlider = document.getElementById('a_slider');
+            
+            if (vSlider && wSlider && aSlider) {
+                updateDialsFromExternal(
+                    parseFloat(vSlider.value),
+                    parseFloat(wSlider.value),
+                    parseFloat(aSlider.value)
+                );
+            }
+        }, 100); // Check every 100ms
+    });
+
+    // Update status display
+    function updateStatus(isAutonomous) {
+      const statusText = document.getElementById('autonomous-status');
+      const statusLight = document.getElementById('status-light');
+      
+      if (isAutonomous) {
+        statusText.textContent = 'AUTONOMOUS MODE: ACTIVE';
+        statusLight.className = 'status-light autonomous';
+      } else {
+        statusText.textContent = 'MANUAL MODE: ACTIVE';
+        statusLight.className = 'status-light manual';
+      }
+    }
+
+    // Function to update dials from external commands (gamepad, autonomous, etc.)
+    function updateDialsFromExternal(linearVel, angularVel, cameraAngle) {
+      // Update linear velocity dial
+      if (linearVel !== undefined) {
+        const vPointer = document.getElementById('v_pointer');
+        const vValue = document.getElementById('v_value');
+        const vSlider = document.getElementById('v_slider');
+        
+        if (vPointer && vValue && vSlider) {
+          const vMin = parseFloat(vSlider.min);
+          const vMax = parseFloat(vSlider.max);
+          const vPercentage = (linearVel - vMin) / (vMax - vMin);
+          const vAngle = (vPercentage * 270) - 135;
+          
+          vPointer.style.transform = `translate(-50%, -100%) rotate(${vAngle}deg)`;
+          vValue.textContent = parseFloat(linearVel).toFixed(2);
+          vSlider.value = linearVel;
+        }
+      }
+      
+      // Update angular velocity dial
+      if (angularVel !== undefined) {
+        const wPointer = document.getElementById('w_pointer');
+        const wValue = document.getElementById('w_value');
+        const wSlider = document.getElementById('w_slider');
+        
+        if (wPointer && wValue && wSlider) {
+          const wMin = parseFloat(wSlider.min);
+          const wMax = parseFloat(wSlider.max);
+          const wPercentage = (angularVel - wMin) / (wMax - wMin);
+          const wAngle = (wPercentage * 270) - 135;
+          
+          wPointer.style.transform = `translate(-50%, -100%) rotate(${wAngle}deg)`;
+          wValue.textContent = parseFloat(angularVel).toFixed(1);
+          wSlider.value = angularVel;
+        }
+      }
+      
+      // Update camera angle dial
+      if (cameraAngle !== undefined) {
+        const aPointer = document.getElementById('a_pointer');
+        const aValue = document.getElementById('a_value');
+        const aSlider = document.getElementById('a_slider');
+        
+        if (aPointer && aValue && aSlider) {
+          const aMin = parseFloat(aSlider.min);
+          const aMax = parseFloat(aSlider.max);
+          const aPercentage = (cameraAngle - aMin) / (aMax - aMin);
+          const aAngle = (aPercentage * 270) - 135;
+          
+          aPointer.style.transform = `translate(-50%, -100%) rotate(${aAngle}deg)`;
+          aValue.textContent = Math.round(cameraAngle);
+          aSlider.value = cameraAngle;
+        }
+      }
+    }
+
+    // Export functions for gamepad script
+    window.updateRoverStatus = updateStatus;
+    window.updateDialsFromExternal = updateDialsFromExternal;
+    
+    // Override the original updateSliderDisplays function when it gets called
+    window.addEventListener('load', function() {
+      // Wait a bit for the gamepad script to load
+      setTimeout(function() {
+        // Intercept the original updateSliderDisplays function
+        const originalUpdateSliderDisplays = window.updateSliderDisplays;
+        if (typeof originalUpdateSliderDisplays === 'function') {
+          window.updateSliderDisplays = function(linearVel, angularVel) {
+            // Call the original function
+            originalUpdateSliderDisplays(linearVel, angularVel);
+            // Update our dials too
+            updateDialsFromExternal(linearVel, angularVel);
+          };
+        }
+      }, 100);
+    });
+  </script>
+
   <script src="gamepad-rover-control.js"></script>
 </body>
-
 </html>
